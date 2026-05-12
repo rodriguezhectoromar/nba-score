@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBA Live Scores</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f;
+      color: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 900px;
+      margin: 0 auto 28px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    h1 span { color: #c9343a; }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #last-updated {
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    button {
+      background: #1e1e2a;
+      border: 1px solid #333;
+      color: #ccc;
+      padding: 7px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    button:hover { background: #2a2a3a; color: #fff; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    .section-heading {
+      max-width: 900px;
+      margin: 28px auto 12px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #555;
+      padding-left: 2px;
+    }
+
+    .section-heading:first-child { margin-top: 0; }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #13131c;
+      border: 1px solid #222;
+      border-radius: 14px;
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+
+    .card.live {
+      border-color: #c9343a;
+      box-shadow: 0 0 0 1px #c9343a33, 0 4px 24px #c9343a22;
+    }
+
+    .card.upcoming {
+      border-color: #2a2a3a;
+      opacity: 0.75;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .status-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: #1e1e2a;
+      color: #888;
+    }
+
+    .status-badge.live {
+      background: #c9343a;
+      color: #fff;
+    }
+
+    .status-badge.upcoming {
+      background: #1e1e2a;
+      color: #6699cc;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #fff;
+      animation: pulse 1.1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .clock { font-size: 0.75rem; color: #666; margin-left: auto; }
+
+    .teams {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .team-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .team-logo {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .team-name {
+      flex: 1;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .team-record {
+      font-size: 0.7rem;
+      color: #555;
+      font-weight: 400;
+    }
+
+    .score {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      min-width: 44px;
+      text-align: right;
+    }
+
+    .score.leader { color: #ffffff; }
+    .score.trailing { color: #666; }
+
+    .divider {
+      height: 1px;
+      background: #1e1e2a;
+      margin: 4px 0;
+    }
+
+    #empty {
+      max-width: 900px;
+      margin: 60px auto;
+      text-align: center;
+      color: #444;
+    }
+
+    #empty h2 { font-size: 1.1rem; margin-bottom: 8px; }
+    #empty p { font-size: 0.85rem; }
+
+    #error-msg {
+      max-width: 900px;
+      margin: 60px auto;
+      text-align: center;
+      color: #c9343a;
+      font-size: 0.9rem;
+    }
+
+    .spinner {
+      max-width: 900px;
+      margin: 80px auto;
+      text-align: center;
+      color: #333;
+      font-size: 0.9rem;
+    }
+
+    .auto-refresh {
+      font-size: 0.7rem;
+      color: #444;
+      text-align: center;
+      max-width: 900px;
+      margin: 20px auto 0;
+    }
+
+    .final-score .score { font-size: 1.4rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>NBA</span> Live Scores</h1>
+    <div class="controls">
+      <span id="last-updated"></span>
+      <button id="refresh-btn" onclick="fetchScores()">Refresh</button>
+    </div>
+  </header>
+
+  <div id="content"></div>
+  <div id="empty" style="display:none">
+    <h2>No games found</h2>
+    <p>Check back later.</p>
+  </div>
+  <div id="error-msg" style="display:none"></div>
+  <div class="spinner" id="spinner">Loading scores...</div>
+  <p class="auto-refresh" id="auto-refresh-note"></p>
+
+  <script>
+    const API = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+    let refreshTimer;
+
+    function fmt(date) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function dateStr(offsetDays) {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      return d.toISOString().slice(0, 10).replace(/-/g, "");
+    }
+
+    function sectionLabel(offsetDays) {
+      if (offsetDays === 0) return "Today";
+      if (offsetDays === 1) return "Tomorrow";
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+    }
+
+    function statusLabel(event) {
+      const s = event.status;
+      const type = s.type;
+      if (type.state === "pre") {
+        const d = new Date(event.date);
+        return { text: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), live: false, upcoming: true };
+      }
+      if (type.state === "post") return { text: "Final", live: false, upcoming: false };
+      const detail = type.shortDetail || type.detail || "";
+      return { text: detail, live: true, upcoming: false };
+    }
+
+    function clockText(event) {
+      const s = event.status;
+      if (s.type.state !== "in") return "";
+      return s.displayClock || "";
+    }
+
+    function renderCard(event) {
+      const comps = event.competitions[0];
+      const teams = comps.competitors;
+      const away = teams.find(t => t.homeAway === "away") || teams[0];
+      const home = teams.find(t => t.homeAway === "home") || teams[1];
+
+      const { text: statusText, live, upcoming } = statusLabel(event);
+      const clock = clockText(event);
+      const isFinal = event.status.type.state === "post";
+
+      const awayScore = upcoming ? null : parseInt(away.score || 0);
+      const homeScore = upcoming ? null : parseInt(home.score || 0);
+      const awayLeading = !upcoming && awayScore > homeScore;
+      const homeLeading = !upcoming && homeScore > awayScore;
+      const tie = !upcoming && awayScore === homeScore;
+
+      function teamHTML(team, score, isLeading) {
+        const record = team.records?.[0]?.summary || "";
+        const logoUrl = team.team.logo || "";
+        const cls = upcoming ? "" : (isLeading ? "leader" : (!tie ? "trailing" : ""));
+        const scoreDisplay = upcoming
+          ? '<span class="score" style="color:#2a2a3a;font-size:1.1rem">—</span>'
+          : `<span class="score ${cls}">${score}</span>`;
+        return `
+          <div class="team-row">
+            ${logoUrl ? `<img class="team-logo" src="${logoUrl}" alt="${team.team.abbreviation}" />` : ""}
+            <span class="team-name">
+              ${team.team.shortDisplayName}
+              ${record ? `<span class="team-record">${record}</span>` : ""}
+            </span>
+            ${scoreDisplay}
+          </div>`;
+      }
+
+      const cardClass = live ? "live" : (upcoming ? "upcoming" : (isFinal ? "final-score" : ""));
+      const badgeClass = live ? "live" : (upcoming ? "upcoming" : "");
+
+      return `
+        <div class="card ${cardClass}">
+          <div class="status-bar">
+            ${live ? '<div class="live-dot"></div>' : ""}
+            <span class="status-badge ${badgeClass}">${live ? "LIVE · " + statusText : (upcoming ? "Upcoming · " + statusText : statusText)}</span>
+            ${clock ? `<span class="clock">${clock}</span>` : ""}
+          </div>
+          <div class="teams">
+            ${teamHTML(away, awayScore, awayLeading)}
+            <div class="divider"></div>
+            ${teamHTML(home, homeScore, homeLeading)}
+          </div>
+        </div>`;
+    }
+
+    async function fetchDay(offsetDays) {
+      const res = await fetch(`${API}?limit=20&dates=${dateStr(offsetDays)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return { offset: offsetDays, events: data.events || [] };
+    }
+
+    async function fetchScores() {
+      const btn = document.getElementById("refresh-btn");
+      const content = document.getElementById("content");
+      const empty = document.getElementById("empty");
+      const errMsg = document.getElementById("error-msg");
+      const spinner = document.getElementById("spinner");
+
+      btn.disabled = true;
+      errMsg.style.display = "none";
+
+      try {
+        const days = await Promise.all([0, 1, 2, 3].map(fetchDay));
+
+        spinner.style.display = "none";
+
+        const stateOrder = { "in": 0, "pre": 1, "post": 2 };
+        let html = "";
+        let totalGames = 0;
+
+        for (const { offset, events } of days) {
+          // Today: show all states. Future days: only upcoming (pre).
+          const filtered = offset === 0
+            ? [...events].sort((a, b) => (stateOrder[a.status.type.state] ?? 3) - (stateOrder[b.status.type.state] ?? 3))
+            : events.filter(e => e.status.type.state === "pre");
+
+          if (filtered.length === 0) continue;
+          totalGames += filtered.length;
+
+          html += `<div class="section-heading">${sectionLabel(offset)}</div>`;
+          html += `<div id="grid">${filtered.map(renderCard).join("")}</div>`;
+        }
+
+        if (totalGames === 0) {
+          content.innerHTML = "";
+          empty.style.display = "block";
+        } else {
+          empty.style.display = "none";
+          content.innerHTML = html;
+        }
+
+        document.getElementById("last-updated").textContent = "Updated " + fmt(new Date());
+        scheduleRefresh();
+      } catch (e) {
+        spinner.style.display = "none";
+        errMsg.textContent = "Could not load scores: " + e.message;
+        errMsg.style.display = "block";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function scheduleRefresh() {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(fetchScores, 15000);
+      document.getElementById("auto-refresh-note").textContent = "Auto-refreshes every 15 seconds";
+    }
+
+    fetchScores();
+  </script>
+</body>
+</html>
