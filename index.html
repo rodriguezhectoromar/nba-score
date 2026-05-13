@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NBA Live Scores</title>
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_X6jch1syr0CHdYQtKKdbBROOqC5C7Dl5Zef03q9S0dw', { api_host: 'https://us.i.posthog.com', defaults: '2026-01-30' });
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -250,7 +254,7 @@
     <h1><span>NBA</span> Live Scores</h1>
     <div class="controls">
       <span id="last-updated"></span>
-      <button id="refresh-btn" onclick="fetchScores()">Refresh</button>
+      <button id="refresh-btn" onclick="posthog.capture('scores_refreshed'); fetchScores()">Refresh</button>
     </div>
   </header>
 
@@ -270,6 +274,7 @@
     const API = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
     let refreshTimer;
     let additionalLoaded = false;
+    let isInitialLoad = true;
 
     function fmt(date) {
       return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -416,11 +421,15 @@
         }
 
         document.getElementById("last-updated").textContent = "Updated " + fmt(new Date());
+        posthog.capture('scores_loaded', { total_games: totalGames, is_initial_load: isInitialLoad });
+        isInitialLoad = false;
         scheduleRefresh();
       } catch (e) {
         spinner.style.display = "none";
         errMsg.textContent = "Could not load scores: " + e.message;
         errMsg.style.display = "block";
+        posthog.capture('scores_fetch_failed', { error_message: e.message });
+        posthog.captureException(e);
       } finally {
         btn.disabled = false;
       }
@@ -434,6 +443,7 @@
         const visible = extra.style.display !== "none";
         extra.style.display = visible ? "none" : "";
         btn.textContent = visible ? "Show additional games" : "Hide additional games";
+        posthog.capture('additional_games_toggled', { action: visible ? 'hidden' : 'shown' });
         return;
       }
 
@@ -452,9 +462,11 @@
         additionalLoaded = true;
         btn.disabled = false;
         btn.textContent = "Hide additional games";
+        posthog.capture('additional_games_shown', { total_games: totalGames });
       } catch (e) {
         btn.disabled = false;
         btn.textContent = "Show additional games";
+        posthog.captureException(e);
       }
     }
 
