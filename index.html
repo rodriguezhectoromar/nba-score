@@ -162,18 +162,62 @@
       flex-shrink: 0;
     }
 
-    .team-name {
+    .seed {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #bbb;
+      min-width: 18px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+
+    .team-meta {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .team-name {
       font-size: 0.95rem;
       font-weight: 600;
       color: #111;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .team-sub {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .playoff-rec {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #555;
     }
 
     .team-record {
-      font-size: 0.7rem;
-      color: #aaa;
+      font-size: 0.68rem;
+      color: #bbb;
       font-weight: 400;
     }
+
+    .series-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 0.7rem;
+    }
+
+    .series-round { font-weight: 600; color: #aaa; letter-spacing: 0.3px; }
+    .series-score-text { font-weight: 800; color: #333; }
 
     .score {
       font-size: 1.6rem;
@@ -272,9 +316,49 @@
 
   <script>
     const API = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+    const STANDINGS_API = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings";
+    const CORE_API = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba";
+
+    function getNBASeason() {
+      const d = new Date();
+      return d.getMonth() >= 9 ? d.getFullYear() + 1 : d.getFullYear();
+    }
+    const NBA_SEASON = getNBASeason();
+
+    let seedMap = {};
+    let seedsLoaded = false;
+    let playoffRecordCache = {};
     let refreshTimer;
     let additionalLoaded = false;
     let isInitialLoad = true;
+
+    async function loadSeeds() {
+      try {
+        const res = await fetch(`${STANDINGS_API}?season=${NBA_SEASON}&seasontype=2`);
+        const data = await res.json();
+        for (const conf of data.children || []) {
+          for (const entry of conf.standings.entries) {
+            const tid = entry.team.id;
+            for (const stat of entry.stats || []) {
+              if (stat.name === 'playoffSeed') seedMap[tid] = Math.round(stat.value);
+            }
+          }
+        }
+        seedsLoaded = true;
+      } catch (e) { console.warn('Could not load seeds', e); }
+    }
+
+    async function prefetchPlayoffRecords(teamIds) {
+      const needed = teamIds.filter(id => !(id in playoffRecordCache));
+      await Promise.allSettled(needed.map(async id => {
+        try {
+          const res = await fetch(`${CORE_API}/seasons/${NBA_SEASON}/types/3/teams/${id}/record?lang=en&region=us`);
+          const data = await res.json();
+          const overall = (data.items || []).find(i => i.type === 'total');
+          playoffRecordCache[id] = overall?.summary || '';
+        } catch { playoffRecordCache[id] = ''; }
+      }));
+    }
 
     function fmt(date) {
       return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -328,8 +412,14 @@
       const homeLeading = !upcoming && homeScore > awayScore;
       const tie = !upcoming && awayScore === homeScore;
 
+      const isPlayoff = !!(comps.series || event.season?.type === 3);
+      const seriesNote = (comps.notes?.[0]?.headline || '').replace(' - ', ' · ');
+      const seriesSummary = comps.series?.summary || '';
+
       function teamHTML(team, score, isLeading) {
-        const record = team.records?.[0]?.summary || "";
+        const rsRecord = team.records?.find(r => r.type === 'total')?.summary || "";
+        const poRecord = isPlayoff ? (playoffRecordCache[team.id] || '') : '';
+        const seed = isPlayoff && seedMap[team.id] ? `#${seedMap[team.id]}` : '';
         const logoUrl = team.team.logo || "";
         const cls = upcoming ? "" : (isLeading ? "leader" : (!tie ? "trailing" : ""));
         const scoreDisplay = upcoming
@@ -337,11 +427,15 @@
           : `<span class="score ${cls}">${score}</span>`;
         return `
           <div class="team-row">
+            ${seed ? `<span class="seed">${seed}</span>` : ''}
             ${logoUrl ? `<img class="team-logo" src="${logoUrl}" alt="${team.team.abbreviation}" />` : ""}
-            <span class="team-name">
-              ${team.team.shortDisplayName}
-              ${record ? `<span class="team-record">${record}</span>` : ""}
-            </span>
+            <div class="team-meta">
+              <span class="team-name">${team.team.shortDisplayName}</span>
+              ${(poRecord || rsRecord) ? `<div class="team-sub">
+                ${poRecord ? `<span class="playoff-rec">${poRecord} playoffs</span>` : ''}
+                ${rsRecord ? `<span class="team-record">${rsRecord}</span>` : ''}
+              </div>` : ''}
+            </div>
             ${scoreDisplay}
           </div>`;
       }
@@ -356,6 +450,11 @@
             <span class="status-badge ${badgeClass}">${live ? "LIVE · " + statusText : (upcoming ? "Upcoming · " + statusText : statusText)}</span>
             ${clock ? `<span class="clock">${clock}</span>` : ""}
           </div>
+          ${isPlayoff && (seriesNote || seriesSummary) ? `
+          <div class="series-info">
+            <span class="series-round">${seriesNote}</span>
+            <span class="series-score-text">${seriesSummary}</span>
+          </div>` : ''}
           <div class="teams">
             ${teamHTML(away, awayScore, awayLeading)}
             <div class="divider"></div>
@@ -404,7 +503,17 @@
       additionalLoaded = false;
 
       try {
+        if (!seedsLoaded) await loadSeeds();
         const days = await Promise.all([0, 1, 2, 3].map(fetchDay));
+
+        const isPostseason = days.some(d => d.events.some(e => e.season?.type === 3));
+        if (isPostseason) {
+          const teamIds = [...new Set(days.flatMap(d =>
+            d.events.flatMap(e => e.competitions[0].competitors.map(c => c.id))
+          ))];
+          await prefetchPlayoffRecords(teamIds);
+        }
+
         spinner.style.display = "none";
 
         const { html, totalGames } = renderDays(days);
@@ -452,6 +561,15 @@
 
       try {
         const days = await Promise.all([4, 5, 6, 7, 8].map(fetchDay));
+
+        const isPostseason = days.some(d => d.events.some(e => e.season?.type === 3));
+        if (isPostseason) {
+          const teamIds = [...new Set(days.flatMap(d =>
+            d.events.flatMap(e => e.competitions[0].competitors.map(c => c.id))
+          ))];
+          await prefetchPlayoffRecords(teamIds);
+        }
+
         const { html, totalGames } = renderDays(days);
 
         const extra = document.createElement("div");
